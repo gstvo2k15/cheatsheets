@@ -1,0 +1,4 @@
+- hosts: localhost
+  roles:
+    - example1-role
+    - example2-role

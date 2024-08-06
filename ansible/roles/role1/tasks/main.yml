@@ -1,0 +1,6 @@
+---
+# Tasks for example1-role
+- name: Ensure example1 file exists
+  template:
+    src: example1.j2
+    dest: /tmp/example1.txt

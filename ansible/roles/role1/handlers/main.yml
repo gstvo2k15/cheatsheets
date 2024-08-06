@@ -1,0 +1,6 @@
+---
+# Handlers for example-role
+- name: Restart example1 service
+  service:
+    name: example1
+    state: restarted
