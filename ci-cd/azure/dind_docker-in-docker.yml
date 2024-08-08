@@ -1,0 +1,22 @@
+stages:
+  - build
+  - test
+
+variables:
+  DOCKER_DRIVER: overlay2
+
+services:
+  - docker:18.09-dind
+
+before_script:
+  - docker info
+
+build:
+  stage: build
+  script:
+    - docker build -t my_flask_app .
+
+test:
+  stage: test
+  script:
+    - docker run --rm my_flask_app pytest

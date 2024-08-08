@@ -1,0 +1,135 @@
+trigger:
+  - main
+
+pool:
+  vmImage: "ubuntu-latest"
+
+variables:
+  pythonVersion: "3.8"
+  terraformVersion: "0.14.7"
+  tstResourceGroup: "tstResourceGroup"
+  tstAppServiceName: "tstFlaskAppService"
+  prodResourceGroup: "prodResourceGroup"
+  prodAppServiceName: "prodFlaskAppService"
+
+stages:
+  - stage: Build
+    jobs:
+      - job: Build
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "$(pythonVersion)"
+            displayName: "Set up Python $(pythonVersion)"
+
+          - script: python -m venv venv
+            displayName: "Create virtual environment"
+
+          - script: |
+              source venv/bin/activate
+              pip install -r requirements.txt
+            displayName: "Install dependencies"
+
+          - script: |
+              source venv/bin/activate
+              pytest --junitxml=test-results.xml
+            displayName: "Run tests"
+            continueOnError: false # Asegura que el pipeline falle si las pruebas fallan
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFiles: "**/test-results.xml"
+              testRunTitle: "Python Unit Test Results"
+
+          - script: |
+              source venv/bin/activate
+              pip install -r requirements.txt
+              pip install gunicorn
+            displayName: "Prepare deployment package"
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: "$(Build.ArtifactStagingDirectory)"
+              ArtifactName: "flask-app"
+              publishLocation: "Container"
+
+          - task: CopyFiles@2
+            inputs:
+              SourceFolder: "$(Build.SourcesDirectory)"
+              Contents: "**/*"
+              TargetFolder: "$(Build.ArtifactStagingDirectory)"
+
+          - task: ArchiveFiles@2
+            inputs:
+              rootFolderOrFile: "$(Build.ArtifactStagingDirectory)"
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: "$(Build.ArtifactStagingDirectory)/flask-app.zip"
+              replaceExistingArchive: true
+
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: "$(Build.ArtifactStagingDirectory)/flask-app.zip"
+              artifact: "flask-app"
+
+  - stage: DeployToTST
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - job: Deploy
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: "$(terraformVersion)"
+
+          - task: Bash@3
+            inputs:
+              targetType: "inline"
+              script: |
+                terraform init
+                terraform apply -var='resource_group=$(tstResourceGroup)' -var='app_service_name=$(tstAppServiceName)' -auto-approve
+
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.x"
+
+          - script: |
+              pip install ansible
+            displayName: "Install Ansible"
+
+          - script: |
+              ansible-playbook -i inventory_tst.ini playbook.yml
+            displayName: "Run Ansible Playbook for TST"
+
+          - script: |
+              curl -f http://$(tstAppServiceName).azurewebsites.net
+            displayName: "Verify TST Deployment"
+
+  - stage: DeployToProd
+    dependsOn: DeployToTST
+    condition: succeeded()
+    jobs:
+      - job: Deploy
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: "$(terraformVersion)"
+
+          - task: Bash@3
+            inputs:
+              targetType: "inline"
+              script: |
+                terraform init
+                terraform apply -var='resource_group=$(prodResourceGroup)' -var='app_service_name=$(prodAppServiceName)' -auto-approve
+
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.x"
+
+          - script: |
+              pip install ansible
+            displayName: "Install Ansible"
+
+          - script: |
+              ansible-playbook -i inventory_prod.ini playbook.yml
+            displayName: "Run Ansible Playbook for Prod"
