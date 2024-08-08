@@ -10,9 +10,44 @@
 - [Loops](./javascript/nodejs/loops.js)
 - [Advanced](./javascript/nodejs/advanced.js)
 
-#### Express
+#### Node.js and Express Application
 
 - [Express App](./javascript/nodejs/express/app.js)
+
+This is a Node.js and Express application with dotenv and ESLint setup.
+
+### Prerequisites
+
+- Node.js >= 12.0.0
+- npm or yarn
+
+### Installing Dependencies
+
+`npm install`
+
+### Running the Application
+
+`npm start`
+
+### Running in Development Mode
+
+`npm run dev`
+
+### Linting the Code
+
+`npm run lint`
+
+### Project Structure
+
+- app.js: The main entry point of the application.
+- config/: Contains configuration files.
+- controllers/: Contains controller functions.
+- middleware/: Contains custom middleware.
+- models/: Contains Mongoose models.
+- routes/: Contains route definitions.
+- .env: Environment variables file.
+- .eslintrc.json: ESLint configuration file.
+- .eslintignore: Files and directories to ignore by ESLint.
 
 ### React
 
