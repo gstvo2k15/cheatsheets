@@ -1,0 +1,6 @@
+Django
+python-dotenv
+flake8
+pytest
+pytest-django
+coverage
