@@ -1,0 +1,103 @@
+trigger:
+  - main
+
+parameters:
+  - name: pythonVersion
+    type: string
+    default: "3.9"
+    values:
+      - "3.7"
+      - "3.8"
+      - "3.9"
+
+variables:
+  buildConfiguration: "Release"
+  artifactName: "python-package"
+  ansibleInventory: "inventory/hosts.ini"
+  ansiblePlaybook: "playbooks/deploy.yml"
+  packagePath: "dist/*.whl"
+
+pool:
+  vmImage: "ubuntu-latest"
+
+stages:
+  - stage: BuildAndTest
+    jobs:
+      - job: BuildAndTestJob
+        displayName: "Build and Test Python Package"
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: ${{ parameters.pythonVersion }}
+              addToPath: true
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+              pip install setuptools wheel
+            displayName: "Install Dependencies and Build Tools"
+
+          - script: |
+              python setup.py sdist bdist_wheel
+            displayName: "Build the Python Package"
+
+          - script: |
+              pip install $(packagePath)
+            displayName: "Install Built Package for Testing"
+
+          - script: |
+              pytest tests/
+            displayName: "Run Unit Tests"
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: "dist"
+              ArtifactName: "$(artifactName)"
+              publishLocation: "Container"
+            displayName: "Publish Python Package Artifact"
+
+  - stage: CodeAnalysis
+    dependsOn: BuildAndTest
+    condition: succeeded()
+    jobs:
+      - job: LintAndSecurity
+        displayName: "Code Linting and Security Checks"
+        steps:
+          - script: |
+              pip install flake8 bandit
+            displayName: "Install Linting and Security Tools"
+
+          - script: |
+              flake8 src/
+            displayName: "Run Linting with Flake8"
+
+          - script: |
+              bandit -r src/
+            displayName: "Run Security Checks with Bandit"
+
+  - stage: DeployToStaging
+    dependsOn: CodeAnalysis
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: DeployStaging
+        displayName: "Deploy to Staging Environment"
+        steps:
+          - script: |
+              sudo apt-get update
+              sudo apt-get install -y ansible
+            displayName: "Install Ansible"
+
+          - script: |
+              ansible-playbook -i $(ansibleInventory) $(ansiblePlaybook) --extra-vars "env=staging"
+            displayName: "Run Ansible Playbook for Staging"
+
+  - stage: DeployToProduction
+    dependsOn: DeployToStaging
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.Reason'], 'Manual'))
+    jobs:
+      - job: DeployProduction
+        displayName: "Deploy to Production Environment"
+        steps:
+          - script: |
+              ansible-playbook -i $(ansibleInventory) $(ansiblePlaybook) --extra-vars "env=production"
+            displayName: "Run Ansible Playbook for Production"
